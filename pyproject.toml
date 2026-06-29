@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oci-secret-helper"
+version = "0.1.16"
+description = "Load OCI Vault secrets into in-memory runtime INI config."
+readme = "README.md"
+requires-python = ">=3.6"
+dependencies = [
+    "oci>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6,<7",
+]
+
+[project.scripts]
+oci-secret-helper = "oci_secret_helper.dynamic_ini:main"
+
+[tool.setuptools]
+py-modules = ["load_dynamic_ini"]
+
+[tool.setuptools.packages.find]
+include = ["oci_secret_helper*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

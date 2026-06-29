@@ -1,0 +1,30 @@
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local OS/editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Local config, sample config, and secret material
+.env
+.env.*
+*.ini
+*.conf
+*_config
+*_config.*
