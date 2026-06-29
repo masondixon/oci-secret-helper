@@ -16,7 +16,7 @@ Install from your package index:
 ```bash
 python -m pip install \
   --index-url "https://PACKAGE_INDEX_HOST/path/to/simple" \
-  oci-secret-helper==0.1.16
+  oci-secret-helper==0.1.17
 ```
 
 This package depends on `oci>=2`. The configured Artifactory index must host or
@@ -31,7 +31,7 @@ This test-phase build supports Python 3.6 and newer. Before production, move
 GitLab CI builds the wheel from the version in `pyproject.toml`:
 
 ```toml
-version = "0.1.16"
+version = "0.1.17"
 ```
 
 Merge request pipelines run tests and build the wheel once for validation. When
@@ -42,7 +42,7 @@ Increment `pyproject.toml` for every change that should publish a new package
 version:
 
 ```toml
-version = "0.1.17"
+version = "0.1.18"
 ```
 
 Artifactory rejects duplicate package versions, so the default-branch promote
@@ -64,7 +64,7 @@ Consumers install from the repository's `/simple` endpoint:
 ```bash
 python -m pip install \
   --index-url "https://PACKAGE_INDEX_HOST/path/to/simple" \
-  oci-secret-helper==0.1.16
+  oci-secret-helper==0.1.17
 ```
 
 ## Python Usage
@@ -238,5 +238,5 @@ Upload to a Python package index:
 ```bash
 python -m twine upload \
   --repository-url "https://PACKAGE_INDEX_HOST/path/to/repository" \
-  dist/oci_secret_helper-0.1.16-py3-none-any.whl
+  dist/oci_secret_helper-0.1.17-py3-none-any.whl
 ```

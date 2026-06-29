@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.17
+
+GitHub publish workflow cleanup.
+
+- Removed the unused basic GitHub Actions workflow.
+- Kept the Python release workflow focused on package build and PyPI
+  publishing.
+
 ## 0.1.16
 
 Direct-only secret loading.
