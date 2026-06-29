@@ -1,14 +1,15 @@
 name: Publish Python Package
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  release-build:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,27 +25,10 @@ jobs:
           python -m pip install -e ".[dev]"
           python -m pip install --upgrade build twine
 
-      - name: Validate release tag
-        run: |
-          python - <<'PY'
-          import os
-          import tomllib
-
-          tag = os.environ["GITHUB_REF_NAME"]
-          with open("pyproject.toml", "rb") as pyproject:
-              version = tomllib.load(pyproject)["project"]["version"]
-
-          if tag.removeprefix("v") != version:
-              raise SystemExit(
-                  f"release tag {tag!r} does not match pyproject.toml "
-                  f"version {version!r}"
-              )
-          PY
-
       - name: Run tests
         run: python -m pytest
 
-      - name: Build release distributions
+      - name: Build distributions
         run: |
           python -m build
           python -m twine check dist/*
@@ -57,7 +41,7 @@ jobs:
 
   pypi-publish:
     runs-on: ubuntu-latest
-    needs: [release-build]
+    needs: [build]
 
     permissions:
       id-token: write
