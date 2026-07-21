@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.18
+
+Encrypted Object Storage configuration.
+
+- Added transparent encrypted-object mode to the existing `vault_id` and
+  `secret_name` loader flow.
+- When `kms_key_id` and `object_storage_bucket` are supplied, the helper treats
+  `secret_name` as the default encrypted object name and decrypts the
+  sectioned INI payload in memory using instance principals.
+- Added optional Object Storage namespace and object-name overrides.
+
 ## 0.1.17
 
 GitHub publish workflow cleanup.

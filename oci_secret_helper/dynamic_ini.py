@@ -3,6 +3,7 @@
 import argparse
 import base64
 import configparser
+import io
 import os
 import sys
 import warnings
@@ -131,9 +132,35 @@ def load_runtime_config(
     secret_name=None,
     secret_text=None,
     secret_format=SECRET_FORMAT_AUTO,
+    kms_key_id=None,
+    object_storage_bucket=None,
+    object_storage_namespace=None,
+    object_storage_object_name=None,
 ):
+    """Load a Vault secret or an encrypted Object Storage INI config.
+
+    Vault secret loading remains the default. Encrypted-object mode is enabled
+    when any optional KMS/Object Storage constructor argument is supplied. In
+    that mode ``secret_name`` is the default object name and ``vault_id``
+    identifies the Vault containing the KMS key.
+    """
     runtime_config = runtime_config_parser()
     if secret_text is None:
+        encrypted_object_settings = resolve_encrypted_object_settings(
+            secret_name=secret_name,
+            kms_key_id=kms_key_id,
+            object_storage_bucket=object_storage_bucket,
+            object_storage_namespace=object_storage_namespace,
+            object_storage_object_name=object_storage_object_name,
+        )
+        if encrypted_object_settings is not None:
+            return load_encrypted_object_config(
+                namespace_name=encrypted_object_settings["namespace_name"],
+                bucket_name=encrypted_object_settings["bucket_name"],
+                object_name=encrypted_object_settings["object_name"],
+                vault_id=vault_id,
+                master_key_id=encrypted_object_settings["master_key_id"],
+            )
         payloads = load_secret_payloads(
             vault_id=vault_id,
             secret_name=secret_name,
@@ -152,6 +179,136 @@ def load_runtime_config(
     )
     add_sections(runtime_config, secret_config)
     return runtime_config
+
+
+def resolve_encrypted_object_settings(
+    secret_name,
+    kms_key_id=None,
+    object_storage_bucket=None,
+    object_storage_namespace=None,
+    object_storage_object_name=None,
+):
+    """Validate optional encrypted-object mode constructor settings."""
+    master_key_id = kms_key_id
+    bucket_name = object_storage_bucket
+    namespace_name = object_storage_namespace
+    configured_object_name = object_storage_object_name
+    encrypted_object_requested = any(
+        (
+            master_key_id,
+            bucket_name,
+            namespace_name,
+            configured_object_name,
+        )
+    )
+    if not encrypted_object_requested:
+        return None
+
+    missing_settings = []
+    if not master_key_id:
+        missing_settings.append("kms_key_id")
+    if not bucket_name:
+        missing_settings.append("object_storage_bucket")
+    if not configured_object_name and not secret_name:
+        missing_settings.append("object_storage_object_name or secret_name")
+    if missing_settings:
+        raise ValueError(
+            "Encrypted Object Storage mode is incomplete. Missing {}."
+            .format(", ".join(missing_settings))
+        )
+
+    return {
+        "master_key_id": master_key_id,
+        "bucket_name": bucket_name,
+        "namespace_name": namespace_name,
+        "object_name": configured_object_name or secret_name,
+    }
+
+
+def load_encrypted_object_config(
+    namespace_name,
+    bucket_name,
+    object_name,
+    vault_id,
+    master_key_id,
+):
+    """Load a client-side KMS encrypted sectioned INI object in memory."""
+    encrypted_object_text = fetch_encrypted_object_text(
+        namespace_name=namespace_name,
+        bucket_name=bucket_name,
+        object_name=object_name,
+        vault_id=vault_id,
+        master_key_id=master_key_id,
+    )
+    return parse_secret_as_config(
+        encrypted_object_text,
+        secret_format=SECRET_FORMAT_INI,
+    )
+
+
+def fetch_encrypted_object_text(
+    namespace_name,
+    bucket_name,
+    object_name,
+    vault_id,
+    master_key_id,
+):
+    """Fetch and decrypt an OCI KMS client-side encrypted object in memory."""
+    required_values = {
+        "bucket_name": bucket_name,
+        "object_name": object_name,
+        "vault_id": vault_id,
+        "master_key_id": master_key_id,
+    }
+    for name, value in required_values.items():
+        if not value:
+            raise ValueError("Missing {}.".format(name))
+
+    (
+        encryption,
+        kms_master_key,
+        kms_master_key_provider,
+        none_retry_strategy,
+        instance_principals_signer,
+        object_storage_client,
+    ) = oci_encrypted_object_sdk()
+
+    no_retry = none_retry_strategy()
+    signer = instance_principals_signer(
+        retry_strategy=no_retry,
+        federation_client_retry_strategy=no_retry,
+    )
+    sdk_config = {"region": signer.region}
+    storage_client = object_storage_client(
+        sdk_config,
+        signer=signer,
+        timeout=OCI_TIMEOUT,
+        retry_strategy=no_retry,
+    )
+    if not namespace_name:
+        namespace_name = storage_client.get_namespace().data
+    master_key = kms_master_key(
+        config=sdk_config,
+        master_key_id=master_key_id,
+        vault_id=vault_id,
+        signer=signer,
+    )
+    key_provider = kms_master_key_provider(
+        config=sdk_config,
+        kms_master_keys=[master_key],
+        signer=signer,
+    )
+
+    encrypted_bytes = storage_client.get_object(
+        namespace_name=namespace_name,
+        bucket_name=bucket_name,
+        object_name=object_name,
+    ).data.content
+    with encryption.create_decryption_stream(
+        master_key_provider=key_provider,
+        stream_to_decrypt=io.BytesIO(encrypted_bytes),
+    ) as decrypted_stream:
+        return decrypted_stream.read().decode("utf-8")
 
 
 def load_secret_payloads(
@@ -310,6 +467,26 @@ def oci_secrets_sdk():
     from oci.secrets import SecretsClient
 
     return NoneRetryStrategy, InstancePrincipalsSecurityTokenSigner, SecretsClient
+
+
+def oci_encrypted_object_sdk():
+    """Lazily import OCI SDK components for encrypted Object Storage reads."""
+    enable_oci_sdk_no_service_imports()
+
+    from oci import encryption
+    from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
+    from oci.encryption import KMSMasterKey, KMSMasterKeyProvider
+    from oci.object_storage import ObjectStorageClient
+    from oci.retry import NoneRetryStrategy
+
+    return (
+        encryption,
+        KMSMasterKey,
+        KMSMasterKeyProvider,
+        NoneRetryStrategy,
+        InstancePrincipalsSecurityTokenSigner,
+        ObjectStorageClient,
+    )
 
 
 def enable_oci_sdk_no_service_imports():

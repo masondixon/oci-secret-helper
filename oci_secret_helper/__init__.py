@@ -5,7 +5,9 @@ import types
 
 from oci_secret_helper.dynamic_ini import (
     add_sections,
+    fetch_encrypted_object_text,
     fetch_vault_secret_text,
+    load_encrypted_object_config,
     load_runtime_config,
     load_secret_texts,
     parse_secret_as_config,
@@ -21,6 +23,10 @@ def load_secret_config(
     vault_id=None,
     secret_name=None,
     secret_text=None,
+    kms_key_id=None,
+    object_storage_bucket=None,
+    object_storage_namespace=None,
+    object_storage_object_name=None,
     **kwargs
 ):
     if not vault_id or not secret_name:
@@ -32,6 +38,10 @@ def load_secret_config(
         vault_id=vault_id,
         secret_name=secret_name,
         secret_text=secret_text,
+        kms_key_id=kms_key_id,
+        object_storage_bucket=object_storage_bucket,
+        object_storage_namespace=object_storage_namespace,
+        object_storage_object_name=object_storage_object_name,
         **kwargs
     )
 
@@ -41,12 +51,20 @@ def get_secret(
     vault_id=None,
     secret_name=None,
     secret_text=None,
+    kms_key_id=None,
+    object_storage_bucket=None,
+    object_storage_namespace=None,
+    object_storage_object_name=None,
     **kwargs
 ):
     secret_config = load_secret_config(
         vault_id=vault_id,
         secret_name=secret_name,
         secret_text=secret_text,
+        kms_key_id=kms_key_id,
+        object_storage_bucket=object_storage_bucket,
+        object_storage_namespace=object_storage_namespace,
+        object_storage_object_name=object_storage_object_name,
         **kwargs
     )
     return secret_value_or_config(secret_config)
@@ -91,10 +109,12 @@ sys.modules[__name__].__class__ = _CallableModule
 
 __all__ = [
     "add_sections",
+    "fetch_encrypted_object_text",
     "fetch_vault_secret_text",
     "get_secret",
     "load_secret_config",
     "load_runtime_config",
+    "load_encrypted_object_config",
     "load_secret_texts",
     "parse_secret_as_config",
     "secret_section_lines",

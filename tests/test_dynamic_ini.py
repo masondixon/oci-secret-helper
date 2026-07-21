@@ -166,6 +166,61 @@ def test_load_runtime_config_fetches_secret_payload(monkeypatch):
     assert config["secret"]["value"] == "example-secret-value"
 
 
+def test_load_runtime_config_uses_encrypted_object_mode(monkeypatch):
+    captured = {}
+
+    def fake_load_encrypted_object_config(**kwargs):
+        captured.update(kwargs)
+        return dynamic_ini.parse_secret_as_config(
+            "[runtime]\napi_token = example-token\n",
+            secret_format="ini",
+        )
+
+    monkeypatch.setattr(
+        dynamic_ini,
+        "load_encrypted_object_config",
+        fake_load_encrypted_object_config,
+    )
+
+    config = dynamic_ini.load_runtime_config(
+        vault_id="ocid1.vault.example",
+        secret_name="configs/runtime.ini.enc",
+        kms_key_id="ocid1.key.example",
+        object_storage_bucket="runtime-config",
+    )
+
+    assert config["runtime"]["api_token"] == "example-token"
+    assert captured == {
+        "namespace_name": None,
+        "bucket_name": "runtime-config",
+        "object_name": "configs/runtime.ini.enc",
+        "vault_id": "ocid1.vault.example",
+        "master_key_id": "ocid1.key.example",
+    }
+
+
+def test_load_runtime_config_rejects_incomplete_encrypted_object_mode():
+    with pytest.raises(ValueError, match="object_storage_bucket"):
+        dynamic_ini.load_runtime_config(
+            vault_id="ocid1.vault.example",
+            secret_name="configs/runtime.ini.enc",
+            kms_key_id="ocid1.key.example",
+        )
+
+
+def test_encrypted_object_settings_default_object_name_to_secret_name():
+    assert dynamic_ini.resolve_encrypted_object_settings(
+        secret_name="configs/runtime.ini.enc",
+        kms_key_id="ocid1.key.example",
+        object_storage_bucket="runtime-config",
+    ) == {
+        "master_key_id": "ocid1.key.example",
+        "bucket_name": "runtime-config",
+        "namespace_name": None,
+        "object_name": "configs/runtime.ini.enc",
+    }
+
+
 def test_load_secret_texts_fetches_and_decodes_secret(monkeypatch):
     class FakeContent:
         content = base64.b64encode(b"example-secret-value").decode("ascii")

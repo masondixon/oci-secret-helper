@@ -11,60 +11,79 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Install
 
-Install from your package index:
+Install from PyPI:
 
 ```bash
-python -m pip install \
-  --index-url "https://PACKAGE_INDEX_HOST/path/to/simple" \
-  oci-secret-helper==0.1.17
+python -m pip install oci-secret-helper==0.1.18
 ```
 
-This package depends on `oci>=2`. The configured Artifactory index must host or
-proxy the OCI Python SDK, or the SDK must already be installed in the target
-environment.
+This installs the required `oci>=2` dependency from PyPI as well.
+
+## Vault Secret Usage
+
+The normal call uses a Vault OCID and secret name:
+
+```python
+import oci_secret_helper
+
+config = oci_secret_helper(
+    vault_id="ocid1.vault.oc1.iad...",
+    secret_name="app_config_secret",
+)
+```
+
+## Encrypted Object Storage Configs
+
+The existing `vault_id` and `secret_name` call shape also supports encrypted
+Object Storage configuration. The KMS/Object Storage arguments are optional
+and default to `None`, so ordinary Vault-secret loading stays the default:
+
+```python
+import oci_secret_helper
+
+config = oci_secret_helper(
+    vault_id="ocid1.vault.oc1.iad...",
+    secret_name="configs/customer-a.ini.enc",
+    kms_key_id="ocid1.key.oc1.iad...",
+    object_storage_bucket="runtime-config",
+)
+```
+
+`vault_id` identifies the Vault containing the KMS key. `secret_name` becomes
+the encrypted object name only when both `kms_key_id` and
+`object_storage_bucket` are supplied; otherwise it continues to identify a
+Vault secret. The helper gets the Object Storage namespace automatically.
+Pass `object_storage_namespace=` to override it, or
+`object_storage_object_name=` to override the object name.
+
+The object must contain a client-side KMS encrypted, sectioned INI file. The
+ciphertext is fetched and decrypted only in memory. If only part of the KMS /
+Object Storage configuration is present, startup fails rather than silently
+falling back to Vault-secret mode.
 
 This test-phase build supports Python 3.6 and newer. Before production, move
 `requires-python` back to `>=3.9` and publish a new version.
 
-## Release Build
+## Releases
 
-GitLab CI builds the wheel from the version in `pyproject.toml`:
+The GitHub Actions release workflow runs on pushes to `main`. It tests the
+package, builds distributions, validates them with Twine, and publishes to
+PyPI using the repository's configured PyPI trusted-publishing environment.
 
-```toml
-version = "0.1.17"
-```
-
-Merge request pipelines run tests and build the wheel once for validation. When
-the change lands on the default branch, the pipeline runs tests, builds the
-wheel, and promotes it to the configured Artifactory PyPI repository.
-
-Increment `pyproject.toml` for every change that should publish a new package
-version:
+Increment the version in `pyproject.toml` before merging a release:
 
 ```toml
 version = "0.1.18"
 ```
 
-Artifactory rejects duplicate package versions, so the default-branch promote
-job expects the package version to be new.
+PyPI does not allow replacing an existing release, so every publish must use a
+new version. No PyPI token belongs in this repository or its workflow: the
+publish job uses GitHub OIDC trusted publishing.
 
-Branch pipelines are suppressed when a merge request pipeline exists, so test
-and build do not run twice for the same commit.
-
-The promote job requires these protected GitLab CI/CD variables:
-
-```text
-ARTIFACTORY_PYPI_REPOSITORY_URL=https://PACKAGE_INDEX_HOST/path/to/repository
-ARTIFACTORY_USERNAME=<username>
-ARTIFACTORY_PASSWORD=<password-or-token>
-```
-
-Consumers install from the repository's `/simple` endpoint:
+Consumers install the public package normally:
 
 ```bash
-python -m pip install \
-  --index-url "https://PACKAGE_INDEX_HOST/path/to/simple" \
-  oci-secret-helper==0.1.17
+python -m pip install oci-secret-helper==0.1.18
 ```
 
 ## Python Usage
@@ -233,10 +252,8 @@ Build the wheel:
 python -m pip wheel . --no-deps --no-build-isolation -w dist
 ```
 
-Upload to a Python package index:
+Upload to PyPI manually only when needed:
 
 ```bash
-python -m twine upload \
-  --repository-url "https://PACKAGE_INDEX_HOST/path/to/repository" \
-  dist/oci_secret_helper-0.1.17-py3-none-any.whl
+python -m twine upload dist/*
 ```
